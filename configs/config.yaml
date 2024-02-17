@@ -1,0 +1,6 @@
+webapi:
+  host: localhost
+  port: 8000
+proxy:
+  host: localhost
+  port: 8080
