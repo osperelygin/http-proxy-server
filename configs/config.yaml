@@ -1,8 +1,6 @@
 webapi:
-  host: localhost
   port: 8000
 proxy:
-  host: localhost
   port: 8080
   certs_gen_script: scripts/gen_cert.sh 
   certs_dir: certs

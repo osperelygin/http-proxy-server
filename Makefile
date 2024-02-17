@@ -9,3 +9,11 @@ build-proxy-server:
 .PHONY: run-proxy-server
 run-proxy-server: 
 	go run cmd/proxy/main.go
+
+.PHONY: up-proxy-server
+up-proxy-server: 
+	docker compose -f deploy/proxy/docker-compose.yaml up -d
+	
+.PHONY: down-proxy-server
+down-proxy-server: 
+	docker compose -f deploy/proxy/docker-compose.yaml down
