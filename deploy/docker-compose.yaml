@@ -1,0 +1,48 @@
+version: '3.9'
+
+services:
+  service-db-postgres:
+    container_name: service-db-postgres
+    restart: always
+    image: postgres:14
+    volumes:
+      - ../db/migrations/create_schema.sql:/docker-entrypoint-initdb.d/migration.sql:ro
+    environment:
+      POSTGRES_DB: proxy
+      POSTGRES_USER: saver
+      POSTGRES_PASSWORD: saver
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -d proxy -U saver" ]
+      interval: 3s
+      retries: 5
+      timeout: 1s
+  proxy-server:
+    container_name: proxy-server
+    build:
+      context: ..
+      dockerfile: build/package/proxy/Dockerfile
+    ports:
+      - 8080:8080
+    volumes:
+      - ../configs:/configs
+    environment:
+      DATABASE_URL: $DATABASE_URL
+    command: sh -c "/scripts/gen_key.sh && /proxy-server"
+    depends_on:
+      service-db-postgres:
+        condition: service_healthy
+  webapi:
+    container_name: webapi
+    build:
+      context: ..
+      dockerfile: build/package/webapi/Dockerfile
+    ports:
+      - 8000:8000
+    volumes:
+      - ../configs:/configs
+    environment:
+      DATABASE_URL: $DATABASE_URL
+    command: /webapi
+    depends_on:
+      service-db-postgres:
+        condition: service_healthy

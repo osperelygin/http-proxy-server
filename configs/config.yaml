@@ -1,5 +1,6 @@
 webapi:
-  port: 8000
+  port: 8000 
+  proxy_url: http://proxy-server:8080 
 proxy:
   port: 8080
   certs_gen_script: scripts/gen_cert.sh 

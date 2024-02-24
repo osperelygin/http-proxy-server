@@ -1,7 +1,6 @@
-package config
+package proxy
 
 import (
-	"log"
 	"os"
 	"path/filepath"
 	"strings"
@@ -9,53 +8,35 @@ import (
 	"github.com/spf13/viper"
 )
 
-type HTTPSrvConfig struct {
-	Port string
-	Host string
-}
-
-func GetHTTPSrvConfig(cfgPath string) HTTPSrvConfig {
-	v := viper.GetViper()
-	v.SetConfigFile(cfgPath)
-	v.SetConfigType(strings.TrimPrefix(filepath.Ext(cfgPath), "."))
-
-	if err := viper.ReadInConfig(); err != nil {
-		log.Fatal(err)
-	}
-
-	return HTTPSrvConfig{
-		Port: v.GetString("proxy.port"),
-		Host: v.GetString("proxy.host"),
-	}
-}
-
-type TlsConfig struct {
+type Config struct {
+	Port     string
 	Script   string
 	CertsDir string
 	KeyFile  string
 	CertFile string
 }
 
-func GetTlsConfig(cfgPath string) TlsConfig {
+func getConfig(cfgPath string) (Config, error) {
 	v := viper.GetViper()
 	v.SetConfigFile(cfgPath)
 	v.SetConfigType(strings.TrimPrefix(filepath.Ext(cfgPath), "."))
 
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatal(err)
+		return Config{}, err
 	}
 
 	currDir, err := os.Getwd()
 	if err != nil {
-		log.Fatal(err)
+		return Config{}, err
 	}
 
 	certsDirRelPath := v.GetString("proxy.certs_dir")
 
-	return TlsConfig{
+	return Config{
+		Port:     v.GetString("proxy.port"),
 		Script:   filepath.Join(currDir, v.GetString("proxy.certs_gen_script")),
 		CertsDir: filepath.Join(currDir, certsDirRelPath),
 		KeyFile:  filepath.Join(currDir, certsDirRelPath, v.GetString("proxy.key_file")),
 		CertFile: filepath.Join(currDir, certsDirRelPath, v.GetString("proxy.cert_file")),
-	}
+	}, nil
 }

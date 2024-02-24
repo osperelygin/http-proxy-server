@@ -1,9 +1,8 @@
-package server
+package proxy
 
 import (
 	"bufio"
 	"crypto/tls"
-	"http-proxy-server/internal/app/proxy/config"
 	"http-proxy-server/internal/pkg/mw"
 	"io"
 	"net/http"
@@ -14,73 +13,62 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type ProxyServer struct {
-	tlsCfg config.TlsConfig
-	srvCfg config.HTTPSrvConfig
-	logger *logrus.Logger
-}
+func (ps ProxyServer) hostTLSConfig(host string) (*tls.Config, error) {
+	if err := exec.Command(ps.cfg.Script, host).Run(); err != nil {
+		ps.logger.WithFields(logrus.Fields{
+			"script": ps.cfg.Script,
+			"host":   host,
+		}).Errorln("exec command failed:", err.Error())
 
-func New(srvCfg config.HTTPSrvConfig, tlsCfg config.TlsConfig, logger *logrus.Logger) *ProxyServer {
-	return &ProxyServer{
-		srvCfg: srvCfg,
-		tlsCfg: tlsCfg,
-		logger: logger,
-	}
-}
-
-func (ps ProxyServer) setMiddleware(handleFunc http.HandlerFunc) http.Handler {
-	h := mw.AccessLog(ps.logger, http.HandlerFunc(handleFunc))
-	return mw.RequestID(h)
-}
-
-func (ps ProxyServer) getRouter() http.Handler {
-	router := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method == http.MethodConnect {
-			ps.proxyHTTPS(w, r)
-			return
-		}
-
-		ps.proxyHTTP(w, r)
-	})
-
-	return ps.setMiddleware(router)
-}
-
-func (ps ProxyServer) ListenAndServe() error {
-	server := http.Server{
-		Addr:    ps.srvCfg.Host + ":" + ps.srvCfg.Port,
-		Handler: ps.getRouter(),
+		return nil, err
 	}
 
-	ps.logger.Infof("start listening at %s:%s", ps.srvCfg.Host, ps.srvCfg.Port)
-	return server.ListenAndServe()
+	tlsCert, err := tls.LoadX509KeyPair(ps.cfg.CertFile, ps.cfg.KeyFile)
+	if err != nil {
+		ps.logger.WithFields(logrus.Fields{
+			"cert file": ps.cfg.CertFile,
+			"key file":  ps.cfg.KeyFile,
+		}).Errorln("LoadX509KeyPair failed:", err.Error())
+
+		return nil, err
+	}
+
+	return &tls.Config{
+		Certificates: []tls.Certificate{tlsCert},
+	}, nil
 }
 
 func (ps ProxyServer) proxyHTTP(w http.ResponseWriter, r *http.Request) {
 	reqID := mw.GetRequestID(r.Context())
+
 	ps.logger.WithField("reqID", reqID).Infoln("entered in proxyHTTP")
 
 	r.Header.Del("Proxy-Connection")
 
-	res, err := http.DefaultTransport.RoundTrip(r)
+	if err := parseFormURLEncoding(r); err != nil {
+		ps.logger.Errorln("parseFormURLEncoding failed:", err.Error())
+	}
+
+	id := ps.saveRequest(r)
+
+	resp, err := http.DefaultTransport.RoundTrip(r)
 	if err != nil {
-		ps.logger.WithField("reqID", reqID).Errorln("round trip failed:", err.Error())
 		http.Error(w, err.Error(), http.StatusServiceUnavailable)
 		return
 	}
 
-	defer res.Body.Close()
-
-	res.Cookies()
-	for key, values := range res.Header {
+	resp.Cookies()
+	for key, values := range resp.Header {
 		for _, value := range values {
 			w.Header().Add(key, value)
 		}
 	}
 
-	w.WriteHeader(res.StatusCode)
-	if _, err := io.Copy(w, res.Body); err != nil {
-		ps.logger.WithField("reqID", reqID).Errorln("io copy failed:", err.Error())
+	ps.saveResponse(resp, id)
+
+	w.WriteHeader(resp.StatusCode)
+	if _, err := io.Copy(w, resp.Body); err != nil {
+		ps.logger.WithField("reqID", reqID).Errorln("io.Copy failed:", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -122,9 +110,18 @@ func (ps ProxyServer) proxyHTTPS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	tlsLocalConn := tls.Server(localConn, tlsConfig)
-	defer tlsLocalConn.Close()
 	if err := tlsLocalConn.Handshake(); err != nil {
 		ps.logger.WithField("reqID", reqID).Errorln("tls handshake failed:", err.Error())
+		http.Error(w, err.Error(), http.StatusInternalServerError)
+		return
+	}
+
+	defer tlsLocalConn.Close()
+
+	reader := bufio.NewReader(tlsLocalConn)
+	request, err := http.ReadRequest(reader)
+	if err != nil {
+		ps.logger.WithField("reqID", reqID).Errorln("read request failed:", err.Error())
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
@@ -138,13 +135,11 @@ func (ps ProxyServer) proxyHTTPS(w http.ResponseWriter, r *http.Request) {
 
 	defer remoteConn.Close()
 
-	reader := bufio.NewReader(tlsLocalConn)
-	request, err := http.ReadRequest(reader)
-	if err != nil {
-		ps.logger.WithField("reqID", reqID).Errorln("read request failed:", err.Error())
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
+	request.URL.Scheme = "https"
+	request.URL.Host = r.URL.Host
+	id := ps.saveRequest(request)
+
+	request.Header.Set("Accept-Encoding", "identity;q=0")
 
 	requestByte, err := httputil.DumpRequest(request, true)
 	if err != nil {
@@ -159,13 +154,13 @@ func (ps ProxyServer) proxyHTTPS(w http.ResponseWriter, r *http.Request) {
 	}
 
 	serverReader := bufio.NewReader(remoteConn)
-	response, err := http.ReadResponse(serverReader, request)
+	resp, err := http.ReadResponse(serverReader, request)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
 
-	rawResponse, err := httputil.DumpResponse(response, true)
+	rawResponse, err := httputil.DumpResponse(resp, true)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
@@ -176,29 +171,8 @@ func (ps ProxyServer) proxyHTTPS(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, err.Error(), http.StatusInternalServerError)
 		return
 	}
-}
 
-func (ps ProxyServer) hostTLSConfig(host string) (*tls.Config, error) {
-	if err := exec.Command(ps.tlsCfg.Script, host).Run(); err != nil {
-		ps.logger.WithFields(logrus.Fields{
-			"script": ps.tlsCfg.Script,
-			"host":   host,
-		}).Errorln("exec command failed:", err.Error())
+	ps.saveResponse(resp, id)
 
-		return nil, err
-	}
-
-	tlsCert, err := tls.LoadX509KeyPair(ps.tlsCfg.CertFile, ps.tlsCfg.KeyFile)
-	if err != nil {
-		ps.logger.WithFields(logrus.Fields{
-			"cert file": ps.tlsCfg.CertFile,
-			"key file":  ps.tlsCfg.KeyFile,
-		}).Errorln("LoadX509KeyPair failed:", err.Error())
-
-		return nil, err
-	}
-
-	return &tls.Config{
-		Certificates: []tls.Certificate{tlsCert},
-	}, nil
+	ps.logger.WithField("reqID", reqID).Infoln("exited from proxyHTTPS")
 }
