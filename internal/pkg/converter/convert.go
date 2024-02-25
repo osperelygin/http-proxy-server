@@ -13,6 +13,7 @@ const (
 	kvDelimiter     = ":"
 	valueDelimiter  = ","
 	headerDelimiter = "\n"
+	cookieDelimiter = "\r\r"
 )
 
 func MapToStr(m map[string][]string) string {
@@ -48,14 +49,19 @@ func StrToMap(str string) map[string][]string {
 func CookieToStr(cookie []*http.Cookie) string {
 	var str string
 	for _, val := range cookie {
-		str += val.String() + headerDelimiter
+		str += val.String() + cookieDelimiter
 	}
 
 	return str
 }
 
 func StrToCookie(str string) []string {
-	return strings.Split(str, headerDelimiter)
+	cookies := strings.Split(str, cookieDelimiter)
+	if len(cookies) == 1 && cookies[0] == str {
+		return nil
+	}
+
+	return cookies
 }
 
 func ModelToRequest(req models.Request) (string, string, io.Reader) {

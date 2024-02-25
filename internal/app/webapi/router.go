@@ -17,6 +17,7 @@ func getRouter(handler webapi_handler.Handler, logger *logrus.Logger) http.Handl
 		webapi.HandleFunc("/request/{id}", handler.GetRequestByID).Methods(http.MethodGet)
 		webapi.HandleFunc("/response/{id}", handler.GetRespByID).Methods(http.MethodGet)
 		webapi.HandleFunc("/repeat/{id}", handler.RepeatRequest).Methods(http.MethodGet)
+		webapi.HandleFunc("/scan/{id}", handler.ScanRequest).Methods(http.MethodGet)
 	}
 	router := mw.AccessLog(logger, webapi)
 	return mw.RequestID(router)
