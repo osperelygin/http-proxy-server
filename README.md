@@ -21,7 +21,7 @@ Parsing requests and response:
 | ---    | ---                    | --- |
 | GET    |`/api/v1/requests`      | List of requests; |
 | GET    |`/api/v1/response/{id}` | Output response for request with specified id; |
-| GET    |`/api/v1/requests/{id}` | Output request; |
+| GET    |`/api/v1/request/{id}`  | Output request; |
 | GET    |`/api/v1/repeat/{id}`   | Resubmit request; |
 | GET    |`/api/v1/scan/{id}`     | Request vulnerability scanner (param-miner); |
 
@@ -79,3 +79,23 @@ Proxy HTTP request:
 Proxy HTTPS request:
 
 `curl -v -x http://localhost:8080 'https://example.com'`
+
+Get list of requests:
+
+`curl http://localhost:8000/api/v1/requests`
+
+Get certain request:
+
+`curl http://localhost:8000/api/v1/request/{id}`
+
+Get certain response by request id:
+
+`curl http://localhost:8000/api/v1/response/{id}`
+
+Resumbit request with id:
+
+`curl http://localhost:8000/api/v1/repeat/{id}`
+
+Scan request with id:
+
+`curl http://localhost:8000/api/v1/scan/{id}`

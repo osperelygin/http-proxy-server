@@ -12,11 +12,11 @@ func AccessLog(logger *logrus.Logger, next http.Handler) http.Handler {
 		start := time.Now()
 		reqID := GetRequestID(r.Context())
 		logger.WithFields(logrus.Fields{
-			"reqID":  reqID,
-			"method": r.Method,
-			"host":   r.URL.Host,
-			"path":   r.URL.Path,
-			"header": r.Header,
+			"reqID":       reqID,
+			"method":      r.Method,
+			"remote_addr": r.RemoteAddr,
+			"path":        r.URL.Path,
+			"header":      r.Header,
 		}).Infoln("start request processing")
 
 		next.ServeHTTP(w, r)
