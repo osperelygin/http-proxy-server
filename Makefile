@@ -17,3 +17,8 @@ up-proxy-server:
 .PHONY: down-proxy-server
 down-proxy-server: 
 	docker compose -f deploy/proxy/docker-compose.yaml down
+
+.PHONY: gen-ca:
+gen-ca:
+	./scripts/gen_ca.sh operelygin
+	
