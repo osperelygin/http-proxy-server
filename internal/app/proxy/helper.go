@@ -7,8 +7,7 @@ import (
 )
 
 func parseFormURLEncoding(r *http.Request) error {
-	headerContentTtype := r.Header.Get("Content-Type")
-	if headerContentTtype != "application/x-www-form-urlencoded" {
+	if r.Header.Get("Content-Type") != "application/x-www-form-urlencoded" {
 		return nil
 	}
 

@@ -7,6 +7,7 @@ import (
 	"http-proxy-server/internal/pkg/logger"
 	webapi_handler "http-proxy-server/internal/pkg/webapi/delivery/http"
 	webapi_repo "http-proxy-server/internal/pkg/webapi/repo/postgres"
+	webapi_usecase "http-proxy-server/internal/pkg/webapi/usecase"
 )
 
 var loggerSingleton logger.Singleton
@@ -27,11 +28,12 @@ func Start() error {
 
 	logger := loggerSingleton.GetLogger()
 	repo := webapi_repo.New(pool, logger)
-	handler, err := webapi_handler.New(repo, cfg.ProxyURL, logger)
+	usecase, err := webapi_usecase.New(repo, cfg.ProxyURL, logger)
 	if err != nil {
 		return err
 	}
 
+	handler := webapi_handler.New(usecase, logger)
 	router := getRouter(handler, logger)
 
 	srv := NewServer(cfg, logger, router)

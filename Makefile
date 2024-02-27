@@ -12,8 +12,13 @@ run-proxy-server:
 
 .PHONY: up-proxy-server
 up-proxy-server: 
-	docker compose -f deploy/proxy/docker-compose.yaml up -d
+	docker compose -f deploy/docker-compose.yaml up -d
 	
 .PHONY: down-proxy-server
 down-proxy-server: 
-	docker compose -f deploy/proxy/docker-compose.yaml down
+	docker compose -f deploy/docker-compose.yaml down
+
+.PHONY: gen-ca
+gen-ca:
+	mkdir certs && ./scripts/gen_ca.sh operelygin
+	
