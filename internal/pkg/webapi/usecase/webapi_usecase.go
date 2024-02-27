@@ -63,7 +63,7 @@ func (uc *Usecase) convertRequest(reqModel models.Request) (*http.Request, error
 
 	req.Header = reqModel.Headers
 	if reqModel.Cookies != nil {
-		req.Header.Add("Cookie", strings.Join(reqModel.Cookies, "\n"))
+		req.Header.Set("Cookie", strings.Join(reqModel.Cookies, "\n"))
 	}
 
 	return req, nil
@@ -116,10 +116,14 @@ func (uc *Usecase) GetHTTPRequest(ctx context.Context, id int) (*http.Request, e
 }
 
 func (uc *Usecase) Scan(ctx context.Context, req models.Request) (bool, error) {
+	var totalCheck int
+
 	for key, values := range req.QueryParams {
 		for idx := range values {
 			for _, cmd := range scanCommands {
+				totalCheck++
 				req.QueryParams[key][idx] += cmd
+				uc.logger.Infoln("scan with query param", req.QueryParams[key][idx])
 				ok, err := uc.scan(ctx, req)
 				req.QueryParams[key][idx] = strings.TrimSuffix(req.QueryParams[key][idx], cmd)
 				if err != nil {
@@ -136,7 +140,9 @@ func (uc *Usecase) Scan(ctx context.Context, req models.Request) (bool, error) {
 	for key, values := range req.PostParams {
 		for idx := range values {
 			for _, cmd := range scanCommands {
+				totalCheck++
 				req.PostParams[key][idx] += cmd
+				uc.logger.Infoln("scan with post param", req.PostParams[key][idx])
 				ok, err := uc.scan(ctx, req)
 				req.PostParams[key][idx] = strings.TrimSuffix(req.PostParams[key][idx], cmd)
 				if err != nil {
@@ -153,7 +159,9 @@ func (uc *Usecase) Scan(ctx context.Context, req models.Request) (bool, error) {
 	for key, values := range req.Headers {
 		for idx := range values {
 			for _, cmd := range scanCommands {
+				totalCheck++
 				req.Headers[key][idx] += cmd
+				uc.logger.Infoln("scan with header", req.Headers[key][idx])
 				ok, err := uc.scan(ctx, req)
 				req.Headers[key][idx] = strings.TrimSuffix(req.Headers[key][idx], cmd)
 				if err != nil {
@@ -169,7 +177,9 @@ func (uc *Usecase) Scan(ctx context.Context, req models.Request) (bool, error) {
 
 	for idx := range req.Cookies {
 		for _, cmd := range scanCommands {
+			totalCheck++
 			req.Cookies[idx] += cmd
+			uc.logger.Infoln("scan with session", req.Cookies[idx])
 			ok, err := uc.scan(ctx, req)
 			req.Cookies[idx] = strings.TrimSuffix(req.Cookies[idx], cmd)
 			if err != nil {
@@ -182,16 +192,16 @@ func (uc *Usecase) Scan(ctx context.Context, req models.Request) (bool, error) {
 		}
 	}
 
+	uc.logger.Infof("vulnerabilities were not found, execute %d check", totalCheck)
+
 	return false, nil
 }
 
 func (uc *Usecase) DoRequest(ctx context.Context, req *http.Request) (*http.Response, error) {
+	req.Header.Del("Content-Length")
 	resp, err := uc.client.Do(req)
 	if err != nil {
-		uc.logger.WithFields(logrus.Fields{
-			"cookies": req.Cookies(),
-			"headers": req.Header,
-		}).Errorln("Do failed:", err.Error())
+		uc.logger.Errorln("Do failed:", err.Error())
 		return nil, err
 	}
 

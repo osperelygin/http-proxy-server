@@ -27,12 +27,15 @@ func MapToStr(m map[string][]string) string {
 		str = strings.TrimRight(str, valueDelimiter) + headerDelimiter
 	}
 
-	return str
+	return strings.TrimSuffix(str, headerDelimiter)
 }
 
 func StrToMap(str string) map[string][]string {
-	res := make(map[string][]string)
+	if str == "" {
+		return nil
+	}
 
+	res := make(map[string][]string)
 	for _, header := range strings.Split(str, headerDelimiter) {
 		idx := strings.Index(header, kvDelimiter)
 		if idx == -1 {
@@ -52,12 +55,12 @@ func CookieToStr(cookie []*http.Cookie) string {
 		str += val.String() + cookieDelimiter
 	}
 
-	return str
+	return strings.TrimSuffix(str, cookieDelimiter)
 }
 
 func StrToCookie(str string) []string {
 	cookies := strings.Split(str, cookieDelimiter)
-	if len(cookies) == 1 && cookies[0] == str {
+	if len(cookies) == 1 && cookies[0] == "" {
 		return nil
 	}
 
@@ -70,6 +73,10 @@ func ModelToRequest(req models.Request) (string, string, io.Reader) {
 		Host:     req.Host,
 		Path:     req.Path,
 		RawQuery: url.Values(req.QueryParams).Encode(),
+	}
+
+	if req.PostParams != nil {
+		return req.Method, reqURL.String(), bytes.NewBufferString(url.Values(req.PostParams).Encode())
 	}
 
 	return req.Method, reqURL.String(), bytes.NewBufferString(req.Body)
